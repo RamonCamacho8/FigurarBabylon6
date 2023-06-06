@@ -1,6 +1,6 @@
 import * as BABYLON from "@babylonjs/core";
-
-
+import "@babylonjs/core/Debug/debugLayer";
+import "@babylonjs/inspector";
 import SceneComponent from "../Babylon_components/SceneComponent";
 import * as Modules from "../Scripts/Modules";
 
@@ -30,8 +30,7 @@ const onSceneReady = async (
   await Modules.CreateEnviroment(scene);
 
   // Debug layer
-  //scene.debugLayer.show();
-
+  scene.debugLayer.show();
 
   scene.onBeforeRenderObservable.add(() =>{
   });

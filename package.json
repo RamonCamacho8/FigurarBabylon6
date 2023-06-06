@@ -8,6 +8,7 @@
     "@babylonjs/havok": "^1.0.1",
     "@babylonjs/loaders": "^6.5.0",
     "@babylonjs/materials": "^6.5.0",
+    "@babylonjs/inspector": "^6.5.0",
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
