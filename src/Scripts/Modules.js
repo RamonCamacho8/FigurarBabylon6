@@ -16,9 +16,9 @@ import buttonSound from "../Assets/audio/buttonSound128kbs.mp3";
 export async function CreateEnviroment(scene){
 
     await createRoom_1(scene);
-    await createRoom_2(scene);
-    await createRoom_3(scene);
-    await createRoom_4(scene);
+    //await createRoom_2(scene);
+    //await createRoom_3(scene);
+    //await createRoom_4(scene);
     
 }
 
@@ -37,7 +37,6 @@ export async function SetupScene(scene, canvas){
     scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), new BABYLON.HavokPlugin(true, await havok()));
     scene.collitionsEnabled = true;
 
-
 }
 
 async function CreatePlayerController(scene ,canvas){
@@ -55,21 +54,21 @@ async function CreatePlayerController(scene ,canvas){
     await SceneLoader.ImportMeshAsync("",Player,"",scene);
     let player = scene.getMeshByName("Player");
     
-    const isometricViewCamera = new BABYLON.UniversalCamera("isometricViewCamera", new BABYLON.Vector3(2.5, 10, -2.5), scene);
-    isometricViewCamera.setTarget(new BABYLON.Vector3(2.5, 0, -2.5));
+    //const isometricViewCamera = new BABYLON.UniversalCamera("isometricViewCamera", new BABYLON.Vector3(2.5, 10, -2.5), scene);
+    //isometricViewCamera.setTarget(new BABYLON.Vector3(2.5, 0, -2.5));
    
     //ViewPort
     firstPersonCamera.viewport = new BABYLON.Viewport(0, .25, 1, 1);
-    isometricViewCamera.viewport = new BABYLON.Viewport(0.75, 0, .25, .25);
+    //isometricViewCamera.viewport = new BABYLON.Viewport(0.75, 0, .25, .25);
 
-    isometricViewCamera.inputs.clear();
+    //isometricViewCamera.inputs.clear();
 
-    scene.activeCameras.push(isometricViewCamera);
+    //scene.activeCameras.push(isometricViewCamera);
     scene.activeCameras.push(firstPersonCamera);
 
     player.position = firstPersonCamera.position;
     player.parent = firstPersonCamera;
-    player.checkCollisions = true;
+    player.checkCollisions = false;
 
     return firstPersonCamera;
 }
@@ -93,15 +92,7 @@ async function CreatePlayerController(scene ,canvas){
     let door = scene.getMeshByName("Room_1_Door");
     const roof = scene.getMeshByName("Room_1_Roof");
     let colliderMesh = scene.getMeshByName("Room_1_Collider");
-
-    
-    colliderMesh.checkCollisions = false;
-    colliderMesh.isPickable = false;
-    colliderMesh.isVisible = false;
-
-
-    roomEnterTrigger(colliderMesh, scene.getMeshByName("Player"), scene);
-    
+    colliderMesh.dispose();
 
   
     roof.isVisible = false;
@@ -115,107 +106,80 @@ async function CreatePlayerController(scene ,canvas){
 }
 
 async function createRoom_2(scene){
-
+    
     const {meshes} = await SceneLoader.ImportMeshAsync("",Room_2,"",scene);
-
+    
     meshes.map((mesh) => {
         mesh.checkCollisions = true;
     })
     
     let roof = scene.getMeshByName("Room_2_Roof");
     roof.isVisible = false;
-
+    
     let colliderMesh = scene.getMeshByName("Room_2_Collider");
-
-    colliderMesh.checkCollisions = false;
-    colliderMesh.isPickable = false;
-    colliderMesh.isVisible = false;
-
-    roomEnterTrigger(colliderMesh, scene.getMeshByName("Player"), scene);
+    colliderMesh.dispose();
+    
     return meshes;
-
+    
 }
 
 async function createRoom_3(scene){
     const {meshes} = await SceneLoader.ImportMeshAsync("",Room_3,"",scene);
-
+    
     meshes.map((mesh) => {
         mesh.checkCollisions = true;
+        
     })
 
     let roof = scene.getMeshByName("Room_3_Roof");
     roof.isVisible = false;
-
+    
     let colliderMesh = scene.getMeshByName("Room_3_Collider");
-
-
-    colliderMesh.checkCollisions = false;
-    colliderMesh.isPickable = false;
-    colliderMesh.isVisible = false;
-
-    roomEnterTrigger(colliderMesh, scene.getMeshByName("Player"), scene);
+    colliderMesh.dispose();
     return meshes;
-
+    
 }
 
 async function createRoom_4(scene){
     const {meshes} = await SceneLoader.ImportMeshAsync("",Room_4,"",scene);
-
+    
     let roof = scene.getMeshByName("Room_4_Roof");
     roof.isVisible = false;
-
+    
     meshes.map((mesh) => {
         mesh.checkCollisions = true;
+        
     })
     
     let door = scene.getMeshByName("Room_4_Door");
     let colliderMesh = scene.getMeshByName("Room_4_Collider");
+    colliderMesh.dispose();
+    door.dispose();
+    
+    return meshes;
+    
+}
+
+function ColliderSetup(colliderMesh, scene){
 
     colliderMesh.checkCollisions = false;
     colliderMesh.isPickable = false;
-    colliderMesh.isVisible = false;
+    colliderMesh.isVisible = true;
 
-    roomEnterTrigger(colliderMesh, scene.getMeshByName("Player"), scene);
+    colliderMesh.actionManager = new BABYLON.ActionManager(scene);
 
-    door.dispose();
-
-    return meshes;
+    colliderMesh.actionManager.registerAction(
+        new BABYLON.ExecuteCodeAction(
+           {
+            trigger: BABYLON.ActionManager.OnIntersectionEnterTrigger,
+            parameter: scene.getMeshByName("Player")
+           },
+           () => { colliderMesh.material.emissiveColor = BABYLON.Color3.Red();
+            console.log("Collision"); }
+        )
+    )
 
 }
-
-/**
- * 
- * 
- * @param {Mesh} colliderMesh
- */
-
-function roomEnterTrigger(colliderMesh, collitionerObject, scene){
-
-    colliderMesh.visibility = .5;
-    let material = new BABYLON.StandardMaterial("material", scene);
-    material.diffuseColor = BABYLON.Color3.Red();
-    colliderMesh.material = material;
-    
-
-    let showedHUD = false;
-
-    scene.registerBeforeRender(function () {
-        if (colliderMesh.intersectsMesh(collitionerObject, true)) {
-            if(colliderMesh === scene.getMeshByName("Room_4_Collider")){
-                console.log("Room 4");
-                if(!showedHUD){
-                    showedHUD = true;
-                    showHUD(scene);
-                }
-            }
-            colliderMesh.material.diffuseColor = BABYLON.Color3.Green();
-        } else {
-            colliderMesh.material.diffuseColor = BABYLON.Color3.Red();
-        }
-    });
-    
-}
-
 async function showHUD(scene){
     //Create advance texture
     var advancedTexture = GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI", true, scene);
