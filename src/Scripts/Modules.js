@@ -22,7 +22,6 @@ export async function CreateEnviroment(scene){
 
     scene.stopAllAnimations();
 
-
 }
 
 /**
@@ -127,9 +126,12 @@ async function createRoom_3(scene){
     const {meshes} = await SceneLoader.ImportMeshAsync("",Room_3,"",scene);
     
     meshes.map((mesh) => {
-        mesh.checkCollisions = true;
+        //mesh.checkCollisions = true;
         if(mesh.name.includes("Collider")){
             ColliderSetup(mesh, scene);
+        }
+        if (mesh.name.includes("Door")){
+            physicBodyCreation(mesh, scene);
         }
     })
 
@@ -151,27 +153,29 @@ async function createRoom_4(scene){
         if(mesh.name.includes("Collider")){
             ColliderSetup(mesh, scene);
         }
+        if (mesh.name.includes("Door")){
+            physicBodyCreation(mesh, scene);
+        }
         
     })
 
-    let doorMesh = scene.getMeshByName("Room_4_Door");
+    return meshes;
+    
+}
 
-    const doorBody = new BABYLON.PhysicsBody(doorMesh, BABYLON.PhysicsMotionType.DYNAMIC, true, scene)
-    doorBody.setMassProperties({
+function physicBodyCreation(mesh, scene){
+
+    const body = new BABYLON.PhysicsBody(mesh, BABYLON.PhysicsMotionType.DYNAMIC, true, scene)
+    body.setMassProperties({
         mass: 1,
       });
     
-    const doorShape = new BABYLON.PhysicsShapeConvexHull(
-        doorMesh,   // mesh from which to produce the convex hull
+    const shape = new BABYLON.PhysicsShapeConvexHull(
+        mesh,   // mesh from which to produce the convex hull
         scene   // scene of the shape
     );
     
-    doorBody.shape = doorShape;
-
-
-
-    return meshes;
-    
+    body.shape = shape;
 }
 
 function ColliderSetup(colliderMesh, scene){
