@@ -23,9 +23,9 @@ const onSceneReady = async (
 
 
   // Setup scene
-  Modules.SetupScene(scene, canvas);
+  await Modules.SetupScene(scene);
 
-  
+  await Modules.CreatePlayerController(scene);
 
   await Modules.CreateEnviroment(scene);
 
