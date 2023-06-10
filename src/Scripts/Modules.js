@@ -32,7 +32,7 @@ export async function SetupScene(scene){
 
     const light = new BABYLON.DirectionalLight("DirectionalLight", new BABYLON.Vector3(-1, -1, 0), scene);
     
-    scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), new BABYLON.HavokPlugin(true, await havok()));
+    scene.enablePhysics(new BABYLON.Vector3(0, 9.81, 0), new BABYLON.HavokPlugin(true, await havok()));
     
 
 }
@@ -46,7 +46,7 @@ export async function CreatePlayerController(scene){
     firstPersonCamera.attachControl(scene.getEngine().getRenderingCanvas(), true);
 
     firstPersonCamera.checkCollisions = false;
-    firstPersonCamera.applyGravity = true;
+    firstPersonCamera.applyGravity = false;
     firstPersonCamera.ellipsoid = new BABYLON.Vector3(.25, .5, .25);
     firstPersonCamera.speed = 0.1;
     firstPersonCamera.minZ = 0.45;
@@ -92,6 +92,7 @@ async function meshesHandler(scene){
         }
 
         if(mesh.name.includes("Door")){
+            console.log("Position: ", mesh.position)
             physicBodyCreation(mesh, scene);
         }
     })
@@ -106,30 +107,20 @@ async function meshesHandler(scene){
 }
 
 function physicBodyCreation(mesh, scene){
-
+    console.log("First position: ", mesh.position)
     let groundAggregate = new BABYLON.PhysicsAggregate(mesh, BABYLON.PhysicsShapeType.BOX, { mass: 0 }, scene)
-    groundAggregate.body.setMotionType(BABYLON.PhysicsMotionType.DYNAMIC)
-    
+    groundAggregate.body.setMotionType(BABYLON.PhysicsMotionType.STATIC)
+    console.log("Final position: ", mesh.position)
     
 }
 
 function groundSetup(mesh, scene){
 
-
+    
     let groundAggregate = new BABYLON.PhysicsAggregate(mesh, BABYLON.PhysicsShapeType.BOX, { mass: 0 }, scene)
     groundAggregate.body.setMotionType(BABYLON.PhysicsMotionType.STATIC)
     console.log(groundAggregate.body)
-    /*const body = new BABYLON.PhysicsBody(mesh, BABYLON.PhysicsMotionType.STATIC, true, scene)
-    body.setMassProperties({
-        mass: 1,
-      });
-    
-    const shape = new BABYLON.PhysicsShapeConvexHull(
-        mesh,   // mesh from which to produce the convex hull
-        scene   // scene of the shape
-    ); 
-    
-    body.shape = shape;*/
+   
 }
 
 
