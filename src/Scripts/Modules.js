@@ -9,13 +9,15 @@ import havok from "@babylonjs/havok"
 import meshesBlender from "../Assets/3Dmodels/FigurarEnviroment.glb";
  
 import buttonSound from "../Assets/audio/buttonSound128kbs.mp3";
+import { truncate } from "fs";
 
 
 export async function CreateEnviroment(scene){
 
+    scene.useRightHandedSystem = true;
     await meshesHandler(scene);
+    CreatePlayerController(scene);
     scene.stopAllAnimations();
-
 
 }
 
@@ -25,29 +27,30 @@ export async function CreateEnviroment(scene){
  */
 export async function SetupScene(scene){
     
-    
 
     let ambientLight = new BABYLON.HemisphericLight("ambientLight", new BABYLON.Vector3(0, 2, 0), scene);
     ambientLight.intensity = 0.5;
 
     const light = new BABYLON.DirectionalLight("DirectionalLight", new BABYLON.Vector3(-1, -1, 0), scene);
     
-    scene.enablePhysics(new BABYLON.Vector3(0, 9.81, 0), new BABYLON.HavokPlugin(true, await havok()));
+    scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), new BABYLON.HavokPlugin(true, await havok()));
+
+
     
 
 }
 
 
 
-export async function CreatePlayerController(scene){
+export function CreatePlayerController(scene){
 
     const firstPersonCamera = new BABYLON.FreeCamera("firstPersonCamera", new BABYLON.Vector3(0, 1, 0), scene);
 
     firstPersonCamera.attachControl(scene.getEngine().getRenderingCanvas(), true);
 
-    firstPersonCamera.checkCollisions = false;
+    firstPersonCamera.checkCollisions = true;
     firstPersonCamera.applyGravity = false;
-    firstPersonCamera.ellipsoid = new BABYLON.Vector3(.25, .5, .25);
+    firstPersonCamera.ellipsoid = new BABYLON.Vector3(.2, .5, .2);
     firstPersonCamera.speed = 0.1;
     firstPersonCamera.minZ = 0.45;
     firstPersonCamera.angularSensibility = 4000;
@@ -57,25 +60,46 @@ export async function CreatePlayerController(scene){
 
     console.log("Player created")
 
-    /*let player = scene.getMeshByName("Player");
-    
-    
-    player.checkCollisions = false;
+    let player = scene.getMeshByName("Player");
+    const plugin = scene.getPhysicsEngine().getPhysicsPlugin();
 
+    
+    let cameraX = firstPersonCamera.position.x;
+    let cameraZ = firstPersonCamera.position.z;
     scene.onBeforeRenderObservable.add(() => {
-        player.position.x = -firstPersonCamera.position._x;
-        player.position.z = firstPersonCamera.position._z;
         
-    })*/
+        cameraX = firstPersonCamera.position.x;
+        cameraZ = firstPersonCamera.position.z;
+
+        plugin._hknp.HP_Body_SetPosition(player.physicsBody._pluginData.hpBodyId, [cameraX, 0.8, cameraZ])
+        
+        
+    })
 
     return firstPersonCamera;
 }
 
-async function meshesHandler(scene){
-    const {meshes, animationGroups} = await BABYLON.SceneLoader.ImportMeshAsync("",meshesBlender,"",scene);
+async function meshesImport(scene){
 
-    meshes.map((mesh) => {
-        //mesh.checkCollisions = true;
+    const {meshes_, animationGroups} = await BABYLON.SceneLoader.ImportMeshAsync("",meshesBlender,"",scene).then((results) => {
+        
+        var root = results.meshes[0];
+        root.name = "xyz3";
+        root.id = "xyz3";
+        return {meshes_: results.meshes, animationGroups: results.animationGroups}
+    });
+
+    return {meshes_, animationGroups};
+}
+
+async function meshesHandler(scene){
+
+    const {meshes_, animationGroups} = await meshesImport(scene);
+
+    var viewer = new BABYLON.PhysicsViewer();
+
+    meshes_.map((mesh) => {
+        
         if(mesh.name.includes("Collider")){
             ColliderSetup(mesh, scene);
         }
@@ -87,13 +111,25 @@ async function meshesHandler(scene){
             groundSetup(mesh, scene);
         }
 
+        if(mesh.name.includes("Wall")){
+            wallsPhisycsEnabler(mesh, scene);
+        }
+
         if(mesh.name.includes("Roof")){
             mesh.isVisible = false;
         }
 
-        if(mesh.name.includes("Door")){
+        if(mesh.name.includes("Door") ){
             console.log("Position: ", mesh.position)
-            physicBodyCreation(mesh, scene);
+            doorPhisycsEnabler(mesh, scene);
+        }
+
+        if(mesh.name.includes("Player")){
+            playerPhisycsEnabler(mesh, scene);
+        }
+
+        if (mesh.physicsBody) {
+            viewer.showBody(mesh.physicsBody);
         }
     })
 
@@ -103,24 +139,61 @@ async function meshesHandler(scene){
         }
     })
 
-
 }
 
-function physicBodyCreation(mesh, scene){
-    console.log("First position: ", mesh.position)
-    let groundAggregate = new BABYLON.PhysicsAggregate(mesh, BABYLON.PhysicsShapeType.BOX, { mass: 0 }, scene)
-    groundAggregate.body.setMotionType(BABYLON.PhysicsMotionType.STATIC)
-    console.log("Final position: ", mesh.position)
+function createHingeJoint(scene){
+    scene.getMeshByName("Room_4_Door")
+}
+
+function playerPhisycsEnabler(mesh, scene){
+    let playerAggregate = new BABYLON.PhysicsAggregate(mesh, BABYLON.PhysicsShapeType.BOX, { mass: 1, startAsleep: false }, scene)
+    playerAggregate.body.setMotionType(BABYLON.PhysicsMotionType.STATIC)
+    mesh.checkCollisions = false;
+}
+
+function doorPhisycsEnabler(mesh, scene){
+    
+    let doorAggregate = new BABYLON.PhysicsAggregate(mesh, BABYLON.PhysicsShapeType.BOX, { mass: 1, startAsleep: false, restitution: 1 }, scene)
+    doorAggregate.body.setMotionType(BABYLON.PhysicsMotionType.DYNAMIC)
+    mesh.checkCollisions = true;
+    
+    if(mesh.name == "Room_4_Door"){
+
+        let hinge = scene.getMeshByName("Room_4_Hinge");
+        let hingeAggregate = new BABYLON.PhysicsAggregate(hinge, BABYLON.PhysicsShapeType.CYLINDER, { mass: 0, startAsleep: false }, scene)
+
+        let hingeJoint = new BABYLON.HingeConstraint(
+            new BABYLON.Vector3(0, 0, 0),
+            new BABYLON.Vector3(0, 0, 0.5),
+            undefined,
+            undefined,
+            scene
+        )
+        
+        hingeAggregate.body.addConstraint(doorAggregate.body, hingeJoint);
+
+    }
+
     
 }
+
+function wallsPhisycsEnabler(mesh, scene){
+    mesh.checkCollisions = true;
+    let wallShape = new BABYLON.PhysicsShapeMesh(
+        mesh,   // mesh from which to produce the convex hull
+        scene   // scene of the shape
+    );
+    let wallAggregate = new BABYLON.PhysicsAggregate(mesh, wallShape, { mass: 0 }, scene)
+    wallAggregate.body.setMotionType(BABYLON.PhysicsMotionType.STATIC)
+    mesh.checkCollisions = false;
+}
+
 
 function groundSetup(mesh, scene){
 
-    
     let groundAggregate = new BABYLON.PhysicsAggregate(mesh, BABYLON.PhysicsShapeType.BOX, { mass: 0 }, scene)
     groundAggregate.body.setMotionType(BABYLON.PhysicsMotionType.STATIC)
-    console.log(groundAggregate.body)
-   
+    mesh.checkCollisions = truncate;
 }
 
 
@@ -138,7 +211,7 @@ function ColliderSetup(colliderMesh, scene){
             trigger: BABYLON.ActionManager.OnIntersectionEnterTrigger,
             parameter: scene.getMeshByName("Player")
            },
-           () => { colliderMesh.material.emissiveColor = BABYLON.Color3.Red();
+           () => { colliderMesh.material.emissiveColor = BABYLON.Color3.Green();
             console.log("Collision on:  ", colliderMesh.name ); }
         )
     )
