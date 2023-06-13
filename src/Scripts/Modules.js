@@ -58,21 +58,15 @@ export function CreatePlayerController(scene){
 
     scene.activeCameras.push(firstPersonCamera);
 
-    console.log("Player created")
-
     let player = scene.getMeshByName("Player");
     const plugin = scene.getPhysicsEngine().getPhysicsPlugin();
 
     
-    let cameraX = firstPersonCamera.position.x;
-    let cameraZ = firstPersonCamera.position.z;
+    
     scene.onBeforeRenderObservable.add(() => {
         
-        cameraX = firstPersonCamera.position.x;
-        cameraZ = firstPersonCamera.position.z;
-
-        plugin._hknp.HP_Body_SetPosition(player.physicsBody._pluginData.hpBodyId, [cameraX, 0.8, cameraZ])
-        
+        player.position.x = firstPersonCamera.position.x;
+        player.position.z = firstPersonCamera.position.z;
         
     })
 
@@ -133,48 +127,24 @@ async function meshesHandler(scene){
         }
     })
 
-    animationGroups.map((animation) => {
-        if (animation.name.includes("Door")){
-            correctAnswer(scene.getMeshByName("Room_1_Square_Button"), animation, scene);
-        }
-    })
+    correctAnswer(scene.getMeshByName("Room_1_Square_Button"), scene.getMeshByName("Room_1_Door"), scene);
 
 }
 
-function createHingeJoint(scene){
-    scene.getMeshByName("Room_4_Door")
-}
-
-function playerPhisycsEnabler(mesh, scene){
-    let playerAggregate = new BABYLON.PhysicsAggregate(mesh, BABYLON.PhysicsShapeType.BOX, { mass: 1, startAsleep: false }, scene)
-    playerAggregate.body.setMotionType(BABYLON.PhysicsMotionType.STATIC)
+function playerPhisycsEnabler(mesh){
     mesh.checkCollisions = false;
 }
 
 function doorPhisycsEnabler(mesh, scene){
-    
-    let doorAggregate = new BABYLON.PhysicsAggregate(mesh, BABYLON.PhysicsShapeType.BOX, { mass: 1, startAsleep: false, restitution: 1 }, scene)
+    mesh.actionManager = new BABYLON.ActionManager(scene);
+    let doorShape = new BABYLON.PhysicsShapeConvexHull(
+        mesh,   // mesh from which to produce the convex hull
+        scene   // scene of the shape
+    );
+    let doorAggregate = new BABYLON.PhysicsAggregate(mesh, doorShape, { mass: 1, startAsleep: true, restitution: 0 }, scene)
     doorAggregate.body.setMotionType(BABYLON.PhysicsMotionType.DYNAMIC)
     mesh.checkCollisions = true;
-    
-    if(mesh.name == "Room_4_Door"){
 
-        let hinge = scene.getMeshByName("Room_4_Hinge");
-        let hingeAggregate = new BABYLON.PhysicsAggregate(hinge, BABYLON.PhysicsShapeType.CYLINDER, { mass: 0, startAsleep: false }, scene)
-
-        let hingeJoint = new BABYLON.HingeConstraint(
-            new BABYLON.Vector3(0, 0, 0),
-            new BABYLON.Vector3(0, 0, 0.5),
-            undefined,
-            undefined,
-            scene
-        )
-        
-        hingeAggregate.body.addConstraint(doorAggregate.body, hingeJoint);
-
-    }
-
-    
 }
 
 function wallsPhisycsEnabler(mesh, scene){
@@ -185,7 +155,6 @@ function wallsPhisycsEnabler(mesh, scene){
     );
     let wallAggregate = new BABYLON.PhysicsAggregate(mesh, wallShape, { mass: 0 }, scene)
     wallAggregate.body.setMotionType(BABYLON.PhysicsMotionType.STATIC)
-    mesh.checkCollisions = false;
 }
 
 
@@ -201,7 +170,14 @@ function ColliderSetup(colliderMesh, scene){
 
     colliderMesh.checkCollisions = false;
     colliderMesh.isPickable = false;
-    colliderMesh.isVisible = false;
+    colliderMesh.isVisible = true;
+    let materialName = ("colliderMaterial",colliderMesh.name);
+    let colliderMaterial = new BABYLON.StandardMaterial(materialName, scene);
+    colliderMaterial.alpha = 0.5;
+    colliderMaterial.emissiveColor = BABYLON.Color3.Red();
+    colliderMesh.material = colliderMaterial;
+
+
 
     colliderMesh.actionManager = new BABYLON.ActionManager(scene);
 
@@ -212,10 +188,20 @@ function ColliderSetup(colliderMesh, scene){
             parameter: scene.getMeshByName("Player")
            },
            () => { colliderMesh.material.emissiveColor = BABYLON.Color3.Green();
-            console.log("Collision on:  ", colliderMesh.name ); }
+            }
         )
     )
 
+    colliderMesh.actionManager.registerAction(
+        new BABYLON.ExecuteCodeAction(
+              {
+                trigger: BABYLON.ActionManager.OnIntersectionExitTrigger,
+                parameter: scene.getMeshByName("Player")
+                },
+                () => { colliderMesh.material.emissiveColor = BABYLON.Color3.Red();
+                console.log("Collision off:  ", colliderMesh.name ); }
+        )
+    )
 }
 async function showHUD(scene){
     //Create advance texture
@@ -228,21 +214,22 @@ async function showHUD(scene){
    
 }
 
-function correctAnswer(answer, doorAnimation){
-
-    answer.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
+function correctAnswer(answerMesh, doorMesh){
+    
+    answerMesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
         BABYLON.ActionManager.OnLeftPickTrigger,
-        function (evt) {
-            console.log("Correct Answer")
-            doorAnimation.play();
+        function () {
+            doorMesh.isVisible = false;
+            doorMesh.checkCollisions = false;
         }
-    ));
+    ))
 }
 
 function edgeRenderForSelectables(selectableMesh, scene){
     selectableMesh.actionManager = new BABYLON.ActionManager(scene);
     selectableMesh.edgesWidth = 1.0;
     selectableMesh.edgesColor = new BABYLON.Color4(0, 0, 0, 1);
+    
     
     let frameRate = buttonPressAnimation(selectableMesh)
 
