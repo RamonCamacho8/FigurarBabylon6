@@ -11,38 +11,49 @@ import meshesBlender from "../Assets/3Dmodels/FigurarEnviroment.glb";
 import buttonSound from "../Assets/audio/buttonSound128kbs.mp3";
 import { truncate } from "fs";
 
+var scene = null;
+var hud = null;
 
-export async function CreateEnviroment(scene){
+var collider_1_visited = false;
+var collider_2_visited = false;
+var collider_3_visited = false;
+var collider_4_visited = false;
 
+var firstQuestion = false;
+
+export async function CreateEnviroment(){
     scene.useRightHandedSystem = true;
-    await meshesHandler(scene);
-    CreatePlayerController(scene);
+    await meshesHandler();
+    CreatePlayerController();
     scene.stopAllAnimations();
 
 }
 
-/**
- * 
- * @param {Scene} scene Scene
- */
-export async function SetupScene(scene){
-    
+export function initScene(){
+    setupLights();
+    setPhysics();
+}
 
-    let ambientLight = new BABYLON.HemisphericLight("ambientLight", new BABYLON.Vector3(0, 2, 0), scene);
-    ambientLight.intensity = 0.5;
 
-    const light = new BABYLON.DirectionalLight("DirectionalLight", new BABYLON.Vector3(-1, -1, 0), scene);
-    
+export function setupScene(scene_){
+    scene = scene_;
+}
+
+async function setPhysics(){
     scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), new BABYLON.HavokPlugin(true, await havok()));
-
-
-    
-
 }
 
 
 
-export function CreatePlayerController(scene){
+function setupLights(){
+    let ambientLight = new BABYLON.HemisphericLight("ambientLight", new BABYLON.Vector3(0, 2, 0), scene);
+    ambientLight.intensity = 0.5;
+    new BABYLON.DirectionalLight("DirectionalLight", new BABYLON.Vector3(-1, -1, 0), scene);
+}
+
+
+
+export function CreatePlayerController(){
 
     const firstPersonCamera = new BABYLON.FreeCamera("firstPersonCamera", new BABYLON.Vector3(0, 1, 0), scene);
 
@@ -73,7 +84,7 @@ export function CreatePlayerController(scene){
     return firstPersonCamera;
 }
 
-async function meshesImport(scene){
+async function meshesImport(){
 
     const {meshes_, animationGroups} = await BABYLON.SceneLoader.ImportMeshAsync("",meshesBlender,"",scene).then((results) => {
         
@@ -86,7 +97,7 @@ async function meshesImport(scene){
     return {meshes_, animationGroups};
 }
 
-async function meshesHandler(scene){
+async function meshesHandler(){
 
     const {meshes_, animationGroups} = await meshesImport(scene);
 
@@ -95,18 +106,18 @@ async function meshesHandler(scene){
     meshes_.map((mesh) => {
         
         if(mesh.name.includes("Collider")){
-            ColliderSetup(mesh, scene);
+            ColliderSetup(mesh);
         }
         if(mesh.name.includes("Button")){
-            edgeRenderForSelectables(mesh, scene);
+            edgeRenderForSelectables(mesh);
         }
         if(mesh.name.includes("Floor")){
             console.log("Setting up ground")
-            groundSetup(mesh, scene);
+            groundSetup(mesh);
         }
 
         if(mesh.name.includes("Wall")){
-            wallsPhisycsEnabler(mesh, scene);
+            wallsPhisycsEnabler(mesh);
         }
 
         if(mesh.name.includes("Roof")){
@@ -115,11 +126,19 @@ async function meshesHandler(scene){
 
         if(mesh.name.includes("Door") ){
             console.log("Position: ", mesh.position)
-            doorPhisycsEnabler(mesh, scene);
+            doorPhisycsEnabler(mesh);
         }
 
         if(mesh.name.includes("Player")){
-            playerPhisycsEnabler(mesh, scene);
+            playerPhisycsEnabler(mesh);
+        }
+
+        if(mesh.name.includes("Desk")){
+            mesh.isPickable = true;
+        }
+
+        if(mesh.name.includes("Locker")){
+            lockPhisycsEnabler(mesh);
         }
 
         if (mesh.physicsBody) {
@@ -127,7 +146,8 @@ async function meshesHandler(scene){
         }
     })
 
-    correctAnswer(scene.getMeshByName("Room_1_Square_Button"), scene.getMeshByName("Room_1_Door"), scene);
+    correctAnswer(scene.getMeshByName("Room_1_Square_Button"), scene.getMeshByName("Room_1_Door"), scene.getMeshByName("Room_1_Locker"));
+    correctAnswer(scene.getMeshByName("Room_3_Option_B_Button"), scene.getMeshByName("Room_3_Door"), scene.getMeshByName("Room_3_Locker"));
 
 }
 
@@ -135,7 +155,34 @@ function playerPhisycsEnabler(mesh){
     mesh.checkCollisions = false;
 }
 
-function doorPhisycsEnabler(mesh, scene){
+function lockPhisycsEnabler(mesh){
+    mesh.actionManager = new BABYLON.ActionManager(scene);
+    let lockShape = new BABYLON.PhysicsShapeConvexHull(
+        mesh,   // mesh from which to produce the convex hull
+        scene   // scene of the shape
+    );
+    let lockAggregate = new BABYLON.PhysicsAggregate(mesh, lockShape, { mass: 1, startAsleep: false, restitution: 1 }, scene)
+    lockAggregate.body.setMotionType(BABYLON.PhysicsMotionType.STATIC)
+
+    //Change scale of the lock 
+    let i = 1;
+    let factor = -1;
+    let increment = 0.001;
+    
+    scene.onBeforeRenderObservable.add(() => {
+        mesh.scaling.x = i;
+        mesh.scaling.y = i;
+        mesh.scaling.z = i;
+        if(i >= 1.1 || i <= 0.9){
+            factor *= -1;
+        }
+        i+= increment*factor;
+    })
+
+}
+
+
+function doorPhisycsEnabler(mesh){
     mesh.actionManager = new BABYLON.ActionManager(scene);
     let doorShape = new BABYLON.PhysicsShapeConvexHull(
         mesh,   // mesh from which to produce the convex hull
@@ -147,7 +194,7 @@ function doorPhisycsEnabler(mesh, scene){
 
 }
 
-function wallsPhisycsEnabler(mesh, scene){
+function wallsPhisycsEnabler(mesh){
     mesh.checkCollisions = true;
     let wallShape = new BABYLON.PhysicsShapeMesh(
         mesh,   // mesh from which to produce the convex hull
@@ -158,15 +205,16 @@ function wallsPhisycsEnabler(mesh, scene){
 }
 
 
-function groundSetup(mesh, scene){
+function groundSetup(mesh){
 
     let groundAggregate = new BABYLON.PhysicsAggregate(mesh, BABYLON.PhysicsShapeType.BOX, { mass: 0 }, scene)
     groundAggregate.body.setMotionType(BABYLON.PhysicsMotionType.STATIC)
-    mesh.checkCollisions = truncate;
+    mesh.checkCollisions = true;
+
 }
 
 
-function ColliderSetup(colliderMesh, scene){
+function ColliderSetup(colliderMesh){
 
     colliderMesh.checkCollisions = false;
     colliderMesh.isPickable = false;
@@ -187,9 +235,13 @@ function ColliderSetup(colliderMesh, scene){
             trigger: BABYLON.ActionManager.OnIntersectionEnterTrigger,
             parameter: scene.getMeshByName("Player")
            },
-           () => { colliderMesh.material.emissiveColor = BABYLON.Color3.Green();
+           () => { 
+
+            colliderMesh.material.emissiveColor = BABYLON.Color3.Green();
+            if(colliderMesh.name.includes("Room_1")){
+                collider_1_visited = true;
             }
-        )
+        })
     )
 
     colliderMesh.actionManager.registerAction(
@@ -203,7 +255,7 @@ function ColliderSetup(colliderMesh, scene){
         )
     )
 }
-async function showHUD(scene){
+async function showHUD(){
     //Create advance texture
     var advancedTexture = GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI", true, scene);
     advancedTexture.idealWidth = 1600;
@@ -214,18 +266,24 @@ async function showHUD(scene){
    
 }
 
-function correctAnswer(answerMesh, doorMesh){
+function correctAnswer(answerMesh, doorMesh, lockMesh){
     
     answerMesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
         BABYLON.ActionManager.OnLeftPickTrigger,
         function () {
+          
+            lockMesh.physicsBody.setMotionType(BABYLON.PhysicsMotionType.DYNAMIC)
+
+            lockMesh.physicsBody.applyForce(new BABYLON.Vector3(1000, 0, 0), lockMesh.getAbsolutePosition());
+
+            
             doorMesh.isVisible = false;
             doorMesh.checkCollisions = false;
         }
     ))
 }
 
-function edgeRenderForSelectables(selectableMesh, scene){
+function edgeRenderForSelectables(selectableMesh){
     selectableMesh.actionManager = new BABYLON.ActionManager(scene);
     selectableMesh.edgesWidth = 1.0;
     selectableMesh.edgesColor = new BABYLON.Color4(0, 0, 0, 1);
@@ -241,7 +299,7 @@ function edgeRenderForSelectables(selectableMesh, scene){
     //For animation when mouse is clicked
     selectableMesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
         BABYLON.ActionManager.OnLeftPickTrigger,
-        function (evt) {
+        function () {
             scene.beginAnimation(selectableMesh, 0,frameRate);
             console.log(selectableMesh.name)
             selectableMesh.isPickable = false;
@@ -251,7 +309,7 @@ function edgeRenderForSelectables(selectableMesh, scene){
     //For edge rendering when mouse is over the mesh
     selectableMesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
         BABYLON.ActionManager.OnPointerOverTrigger,
-        function (evt) {
+        function () {
 
             selectableMesh.enableEdgesRendering();
         }
@@ -259,11 +317,8 @@ function edgeRenderForSelectables(selectableMesh, scene){
 
     selectableMesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
         BABYLON.ActionManager.OnPointerOutTrigger,
-        function (evt) {
-       
+        function () {
             selectableMesh.disableEdgesRendering();
-
-
         }
     ));
 

@@ -23,16 +23,12 @@ const onSceneReady = async (
 
 
   // Setup scene
-  await Modules.SetupScene(scene);
+  Modules.setupScene(scene);
+  Modules.initScene();
   await Modules.CreateEnviroment(scene);
 
   // Debug layer
   scene.debugLayer.show();
-
-  var physicsViewer;
-
-
-
 
   scene.onBeforeRenderObservable.add(() =>{
   });
