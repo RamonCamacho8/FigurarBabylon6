@@ -9,33 +9,46 @@ import havok from "@babylonjs/havok"
 import meshesBlender from "../Assets/3Dmodels/FigurarEnviroment.glb";
  
 import buttonSound from "../Assets/audio/buttonSound128kbs.mp3";
+import hud_1 from "../Assets/images/HUD_1.png";
+import hud_2 from "../Assets/images/HUD_2.png";
+import hud_3 from "../Assets/images/HUD_3.png";
+import hud_4 from "../Assets/images/HUD_4.png";
+import finalHud from "../Assets/images/HUD_FINAL.png";
 
 var scene = null;
-var hud = null;
+
+var advancedTexture = null;
+var image = null;
+var firstPersonCamera = null;
 
 var observerCollider_1 = null;
 var observerCollider_2 = null;
 var observerCollider_3 = null;
 var observerCollider_4 = null;
+var observerCollider_5 = null;
 
 var collider_1_visited = false;
 var collider_2_visited = false;
 var collider_3_visited = false;
 var collider_4_visited = false;
+var collider_5_visited = false;
 
 var firstQuestion = false;
 
 export async function CreateEnviroment(){
+
     scene.useRightHandedSystem = true;
     await meshesHandler();
     CreatePlayerController();
     scene.stopAllAnimations();
+    showHUD();
 
 }
 
 export function initScene(){
     setupLights();
     setPhysics();
+    setWebXR();
 }
 
 
@@ -45,6 +58,44 @@ export function setupScene(scene_){
 
 async function setPhysics(){
     scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), new BABYLON.HavokPlugin(true, await havok()));
+}
+
+async function setWebXR(){
+
+    const xrDefault = await scene.createDefaultXRExperienceAsync() // WebXRDefaultExperience
+    const xrHelper = xrDefault.baseExperience
+    const selectedMeshes = {}
+
+    // POINTERDOWN
+    scene.onPointerObservable.add((pointerInfo) => {
+        const { pickInfo } = pointerInfo
+        const { hit } = pickInfo
+        const { pickedMesh } = pickInfo
+        if (!hit) return
+        if (!pickedMesh) return
+        if (!pickedMesh.startInteraction) return
+        selectedMeshes[pointerInfo.event.pointerId] = pickedMesh
+        if (xrHelper && xrHelper.state === BABYLON.WebXRState.IN_XR) { // XR Mode
+            const xrInput = xrDefault.pointerSelection.getXRControllerByPointerId(pointerInfo.event.pointerId)
+            if (!xrInput) return
+            const motionController = xrInput.motionController
+            if (!motionController) return
+            pickedMesh.startInteraction(pointerInfo, motionController.rootMesh)
+        } else {
+            pickedMesh.startInteraction(pointerInfo, scene.activeCamera)
+        }
+    }, BABYLON.PointerEventTypes.POINTERDOWN)
+
+    // POINTERUP
+    scene.onPointerObservable.add((pointerInfo) => {
+        const pickedMesh = selectedMeshes[pointerInfo.event.pointerId]
+        if (pickedMesh) {
+            if (pickedMesh.endInteraction) {
+                pickedMesh.endInteraction(pointerInfo)
+            }
+            delete selectedMeshes[pointerInfo.event.pointerId]
+        }
+    }, BABYLON.PointerEventTypes.POINTERUP)
 }
 
 
@@ -61,7 +112,7 @@ function setupLights(){
 
 export function CreatePlayerController(){
 
-    const firstPersonCamera = new BABYLON.FreeCamera("firstPersonCamera", new BABYLON.Vector3(0, 1, 0), scene);
+    firstPersonCamera = new BABYLON.FreeCamera("firstPersonCamera", new BABYLON.Vector3(0, 1, 0), scene);
 
     firstPersonCamera.attachControl(scene.getEngine().getRenderingCanvas(), true);
 
@@ -113,6 +164,8 @@ async function meshesHandler(){
     let room_2_Buttons = [];
     let room_3_Buttons = [];
     let room_4_Buttons = [];
+    let room_5_Buttons = [];
+    let room_6_Buttons = [];
 
 
     meshes_.map((mesh) => {
@@ -134,6 +187,13 @@ async function meshesHandler(){
 
         if(mesh.name.includes("Button") && mesh.name.includes("Room_4")){
             room_4_Buttons.push(mesh);
+        }
+
+        if(mesh.name.includes("Button") && mesh.name.includes("Room_5")){
+            room_5_Buttons.push(mesh);
+        }
+        if (mesh.name.includes("Button") && mesh.name.includes("Room_6")) {
+            room_6_Buttons.push(mesh);
         }
 
 
@@ -163,12 +223,21 @@ async function meshesHandler(){
             mesh.isPickable = true;
         }
 
-        if(mesh.name.includes("Locker")){
+        if(mesh.name.includes("Locker") && !mesh.name.includes("Final")){
             lockPhisycsEnabler(mesh);
+            lockAnimation(mesh);
         }
+        if(mesh.name.includes("Locker") && mesh.name.includes("Final")){
+            lockAnimation(mesh);
+        }
+
 
         if (mesh.physicsBody) {
             //viewer.showBody(mesh.physicsBody);
+        }
+
+        if(mesh.name.includes("Prop")){
+            makeGrabbable(mesh);
         }
     })
 
@@ -204,6 +273,27 @@ async function meshesHandler(){
         }
     });
 
+    observerCollider_4 = scene.onBeforeRenderObservable.add(() => {
+        if(collider_4_visited){
+            room_5_Buttons.map((button) => {
+                edgeRenderForSelectables(button);
+            })
+            correctAnswer(scene.getMeshByName("Room_5_Option_C_Button"), scene.getMeshByName("Room_5_Door"), scene.getMeshByName("Room_5_Locker"));
+            
+            scene.onBeforeRenderObservable.remove(observerCollider_4);
+        }
+    }   
+    );
+
+   observerCollider_5 = scene.onBeforeRenderObservable.add(() => {
+        if(collider_5_visited){
+            
+            finalAnswer(scene.getMeshByName("Room_2_FinalLocker"));
+            scene.onBeforeRenderObservable.remove(observerCollider_5);
+        }
+    }
+    );
+
 
     
 
@@ -213,16 +303,7 @@ function playerPhisycsEnabler(mesh){
     mesh.checkCollisions = false;
 }
 
-function lockPhisycsEnabler(mesh){
-    mesh.checkCollisions = false;
-    mesh.actionManager = new BABYLON.ActionManager(scene);
-    let lockShape = new BABYLON.PhysicsShapeConvexHull(
-        mesh,   // mesh from which to produce the convex hull
-        scene   // scene of the shape
-    );
-    let lockAggregate = new BABYLON.PhysicsAggregate(mesh, lockShape, { mass: 1, startAsleep: false, restitution: 1 }, scene)
-    lockAggregate.body.setMotionType(BABYLON.PhysicsMotionType.STATIC)
-
+function lockAnimation(mesh){
     //Change scale of the lock 
     let i = 1;
     let factor = -1;
@@ -237,6 +318,39 @@ function lockPhisycsEnabler(mesh){
         }
         i+= increment*factor;
     })
+}
+
+function finalAnswer(colliderMesh){
+
+    colliderMesh.actionManager = new BABYLON.ActionManager(scene);
+
+    colliderMesh.actionManager.registerAction(
+        new BABYLON.ExecuteCodeAction(
+           {
+            trigger: BABYLON.ActionManager.OnIntersectionEnterTrigger,
+            parameter: scene.getMeshByName("PyramidProp")
+           },
+           () => { 
+                advancedTexture.removeControl(image);
+                image = new GUI.Image("but", finalHud);
+                advancedTexture.addControl(image);
+                firstPersonCamera.detachControl(scene.getEngine().getRenderingCanvas());
+                
+        })
+    )
+
+}
+
+
+function lockPhisycsEnabler(mesh){
+    mesh.checkCollisions = false;
+    mesh.actionManager = new BABYLON.ActionManager(scene);
+    let lockShape = new BABYLON.PhysicsShapeConvexHull(
+        mesh,   // mesh from which to produce the convex hull
+        scene   // scene of the shape
+    );
+    let lockAggregate = new BABYLON.PhysicsAggregate(mesh, lockShape, { mass: 1, startAsleep: false, restitution: 1 }, scene)
+    lockAggregate.body.setMotionType(BABYLON.PhysicsMotionType.STATIC)
 
 }
 
@@ -299,45 +413,64 @@ function ColliderSetup(colliderMesh){
             colliderMesh.material.emissiveColor = BABYLON.Color3.Green();
             if(colliderMesh.name.includes("Room_1")){
                 collider_1_visited = true;
+                image = new GUI.Image("but", hud_1);
+                advancedTexture.addControl(image);
+
             }
             if(colliderMesh.name.includes("Room_2")){
                 collider_2_visited = true;
+                if(!collider_3_visited){
+                    advancedTexture.removeControl(image);
+                    image = new GUI.Image("but", hud_2);
+                    advancedTexture.addControl(image);
+                }
+                
             }
             if(colliderMesh.name.includes("Room_3")){
                 collider_3_visited = true;
+                advancedTexture.removeControl(image);
+                image = new GUI.Image("but", hud_3);
+                advancedTexture.addControl(image);
             }
             if(colliderMesh.name.includes("Room_4")){
                 collider_4_visited = true;
+                advancedTexture.removeControl(image);
+                image = new GUI.Image("but", hud_4);
+                advancedTexture.addControl(image);
             }
+            if(colliderMesh.name.includes("Room_5")){
+                collider_5_visited = true;
+            }
+            
         })
     )
 
-    colliderMesh.actionManager.registerAction(
-        new BABYLON.ExecuteCodeAction(
-              {
-                trigger: BABYLON.ActionManager.OnIntersectionExitTrigger,
-                parameter: scene.getMeshByName("Player")
-                },
-                () => { 
-                    colliderMesh.material.emissiveColor = BABYLON.Color3.Red();
-                    console.log("Collision off:  ", colliderMesh.name );
-                    
-            }
-        )
-    )
+    
 }
 async function showHUD(){
     //Create advance texture
-    var advancedTexture = GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI", true, scene);
-    advancedTexture.idealWidth = 1600;
+
+    advancedTexture = GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI", true, scene);
+    advancedTexture.idealWidth = 1920;
     advancedTexture.renderAtIdealSize = true;
-   
-    await advancedTexture.parseFromSnippetAsync("ET5SI0#1");
-    return scene;
+    advancedTexture.addControl(image);
    
 }
 
 function correctAnswer(answerMesh, doorMesh, lockMesh){
+
+    if(answerMesh){
+        console.log("Answer mesh: ", answerMesh)
+    }
+    if(doorMesh){
+        console.log("Door mesh: ", doorMesh)
+    }
+    if(lockMesh){
+        console.log("Lock mesh: ", lockMesh)
+    }
+
+    console.log("DONE.")
+
     
     answerMesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
         BABYLON.ActionManager.OnLeftPickTrigger,
@@ -353,16 +486,38 @@ function correctAnswer(answerMesh, doorMesh, lockMesh){
         }
     ))
 }
+function edgeRenderForProps(selectableMesh){
+    selectableMesh.actionManager = new BABYLON.ActionManager(scene);
+    selectableMesh.edgesWidth = 1.0;
+    selectableMesh.edgesColor = new BABYLON.Color4(0, 0, 0, 1);
+    
+    //For sound when mouse is clicked
+    selectableMesh.actionManager.registerAction(new BABYLON.PlaySoundAction(
+        BABYLON.ActionManager.OnPickDownTrigger,new BABYLON.Sound("down", buttonSound, scene)));
+    
+    //For edge rendering when mouse is over the mesh
+    selectableMesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
+        BABYLON.ActionManager.OnPointerOverTrigger,
+        function () {
+
+            selectableMesh.enableEdgesRendering();
+        }
+    ));
+
+    selectableMesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
+        BABYLON.ActionManager.OnPointerOutTrigger,
+        function () {
+            selectableMesh.disableEdgesRendering();
+        }
+    ));
+}
+
 
 function edgeRenderForSelectables(selectableMesh){
     selectableMesh.actionManager = new BABYLON.ActionManager(scene);
     selectableMesh.edgesWidth = 1.0;
     selectableMesh.edgesColor = new BABYLON.Color4(0, 0, 0, 1);
     
-    
-    let frameRate = buttonPressAnimation(selectableMesh)
-
-
     //For sound when mouse is clicked
     selectableMesh.actionManager.registerAction(new BABYLON.PlaySoundAction(
         BABYLON.ActionManager.OnPickDownTrigger,new BABYLON.Sound("down", buttonSound, scene)));
@@ -371,7 +526,6 @@ function edgeRenderForSelectables(selectableMesh){
     selectableMesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
         BABYLON.ActionManager.OnLeftPickTrigger,
         function () {
-            scene.beginAnimation(selectableMesh, 0,frameRate);
             console.log(selectableMesh.name)
             selectableMesh.isPickable = false;
         }
@@ -395,42 +549,26 @@ function edgeRenderForSelectables(selectableMesh){
 
 }
 
-function buttonPressAnimation(mesh){
-
-    const frameRate = 2;
-    const keyFrames = [];
-    let initialPos = mesh.position.x 
-
-
-    keyFrames.push({
-        frame: 0,
-        value: initialPos // Starting rotation
-    });
-    keyFrames.push({
-        frame: frameRate/2, // Duration of animation (in frames)
-        value: initialPos-.005 // Ending rotation
-    });
-
-    keyFrames.push({
-        frame: frameRate, // Duration of animation (in frames)
-        value: initialPos // Ending rotation
-    });
-
-
-    const pressAnimation = new BABYLON.Animation(
-        "pressAnimation",
-        "position.x",
-        16, // Frames per second
-        BABYLON.Animation.ANIMATIONTYPE_FLOAT,
-        BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT  
-    );
-
-    pressAnimation.setKeys(keyFrames);
-    mesh.animations.push(pressAnimation);
-
-    return frameRate;
-} 
-
+const makeGrabbable = function(model) {
+    model.checkCollisions = true;
+    edgeRenderForProps(model);
+    Object.assign(model, {
+        startInteraction(pointerInfo, controllerMesh) {
+            this.props = this.props || {}
+            if (this.props.grabbedPointerId === undefined) {
+                this.props.originalParent = this.parent
+            }
+            this.props.grabbedPointerId = pointerInfo.event.pointerId
+            this.setParent(controllerMesh)
+        },
+        endInteraction(pointerInfo) {
+            if (this.props.grabbedPointerId === pointerInfo.event.pointerId) {
+                this.setParent(this.props.originalParent)
+                delete this.props.grabbedPointerId
+            }
+        }
+    })
+}
 
 
 

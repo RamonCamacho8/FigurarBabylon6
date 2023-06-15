@@ -1,5 +1,5 @@
 
-import * as BABYLON from "babylonjs";
+import * as BABYLON from "@babylonjs/core";
 
 
 export function GizmoInterface(scene) {
@@ -30,17 +30,17 @@ export function GizmoInterface(scene) {
 
         switch (pointerInfo.type) {
             case BABYLON.PointerEventTypes.POINTERDOWN:
-                if (!holding && pointerInfo.pickInfo.pickedMesh && pointerInfo.pickInfo.pickedMesh.XRpickable) {
+                if (!holding && pointerInfo.pickInfo.pickedMesh /*&& pointerInfo.pickInfo.pickedMesh.XRpickable*/) {
                   
                     holding = true;
                     attachedMesh = pointerInfo.pickInfo.pickedMesh;
                     gizmoManager.attachToMesh(attachedMesh);
                     
-                    if (attachedMesh.physicsImpostor) {
+                    if (attachedMesh.physicsBody) {
                        
                       
-                        attachedMesh_mass = attachedMesh.physicsImpostor.mass;
-                        attachedMesh.physicsImpostor.setMass(0);
+                        attachedMesh_mass = attachedMesh.physicsBody.getMassProperties()
+                        attachedMesh.physicsBody.setMassProperties({ mass: 0 })
                        
 
                     }
@@ -56,7 +56,7 @@ export function GizmoInterface(scene) {
                 if (holding && attachedMesh) {
                     holding = false;
                     if (attachedMesh.physicsImpostor) {
-                        attachedMesh.physicsImpostor.setMass(attachedMesh_mass);
+                        attachedMesh.physicsImpostor.setMassProperties(attachedMesh_mass);
                     }
 
                 }
